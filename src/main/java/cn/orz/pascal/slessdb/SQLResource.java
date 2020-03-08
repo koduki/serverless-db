@@ -11,21 +11,20 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
-@Path("/hello")
-public class ExampleResource {
+@Path("/sql")
+public class SQLResource {
 
     @Inject
     DBEngine db;
 
     @GET
     @Produces(MediaType.TEXT_PLAIN)
-    public String hello() throws SQLException, IOException, ClassNotFoundException {
-        String url = "jdbc:h2:file:./db/testdb";
-
-        db.connection(url, (con) -> {
+    public String execute() throws SQLException, IOException, ClassNotFoundException {
+        long s = System.nanoTime();
+        db.connection((con) -> {
             try {
                 try (Statement st = con.createStatement()) {
-//                st.execute("CREATE TABLE sample_tbl (name varchar(255))");
+                st.execute("CREATE TABLE IF NOT EXISTS sample_tbl (name varchar(255))");
                     st.execute("INSERT INTO sample_tbl(name) values('Nanoha')");
                     st.execute("INSERT INTO sample_tbl(name) values('Fate')");
                     st.execute("INSERT INTO sample_tbl(name) values('Arisa')");
@@ -35,7 +34,7 @@ public class ExampleResource {
                 try (Statement st = con.createStatement()) {
                     try (ResultSet rs = st.executeQuery("SELECT name FROM sample_tbl")) {
                         while (rs.next()) {
-                            System.out.println(rs.getString(1));
+//                            System.out.println(rs.getString(1));
                         }
                     }
                 }
@@ -44,8 +43,12 @@ public class ExampleResource {
                 return Optional.of(ex);
             }
         });
+        long e = System.nanoTime();
 
-        return "hello";
+        String msg = String.format("tracelog:" + "web response(ms): " + "%.3f", ((e - s) / 1_000_000.0));
+        System.out.println(msg);
+
+        return "success";
     }
 
 }

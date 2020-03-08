@@ -5,6 +5,10 @@
  */
 package cn.orz.pascal.slessdb;
 
+import com.google.cloud.storage.Blob;
+import com.google.cloud.storage.Bucket;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +18,11 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  *
@@ -23,11 +31,46 @@ import javax.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class DBEngine {
 
-    synchronized public void connection(String url, Function<Connection, Optional<SQLException>> callback) throws SQLException, ClassNotFoundException, IOException {
-        String dbname = parseUrl(url);
+    @Inject
+    @ConfigProperty(name = "serverlessdb.url")
+    String url;
 
-        String backup = "/tmp/db.backup";
-        Files.copy(Path.of(backup), Path.of(dbname + ".mv.db"), StandardCopyOption.REPLACE_EXISTING);
+    @Inject
+    @ConfigProperty(name = "serverlessdb.backup")
+    String backup;
+
+    String dbname;
+
+    String bcuketName = "serverlsss-db26y345872t7852";
+
+    public DBEngine() {
+    }
+
+    @PostConstruct
+    public void init() {
+        this.dbname = parseUrl(url);
+    }
+
+    synchronized public void connection(Function<Connection, Optional<SQLException>> callback) throws SQLException, ClassNotFoundException, IOException {
+        if (!Files.exists(Path.of(dbname))) {
+            Files.createDirectories(Path.of("./db"));
+        }
+
+        Bucket bucket = Logger.trace("gcs auth(ms): ", () -> {
+            Storage storage = StorageOptions.getDefaultInstance().getService();
+            return storage.get(bcuketName);
+        });
+
+        Logger.trace("gcs read(ms): ", () -> {
+            Blob blob = bucket.get(backup);
+            try {
+                if (blob.exists()) {
+                    blob.downloadTo(Path.of(dbname + ".mv.db"));
+                }
+            } catch (NullPointerException ex) {
+                System.err.println("WARN: no db");
+            }
+        });
 
         Class.forName("org.h2.Driver");
         try (Connection con = DriverManager.getConnection(url)) {
@@ -36,14 +79,21 @@ public class DBEngine {
                 throw r.get();
             }
         } finally {
-            System.out.println("backup:new");
-            Files.copy(Path.of(dbname + ".mv.db"), Path.of(backup), StandardCopyOption.REPLACE_EXISTING);
+            Logger.trace("gcs write(ms): ", () -> {
+                try {
+                    byte[] bytes = Files.readAllBytes(Path.of(dbname + ".mv.db"));
+                    bucket.create(backup, bytes);
+                    return Optional.empty();
+                } catch (IOException ex) {
+                    return Optional.of(ex);
+                }
+            });
         }
     }
 
     private String parseUrl(String url) {
         String[] xs = url.split(":");
-        String dbname = xs[xs.length - 1];
-        return dbname;
+        return xs[xs.length - 1];
     }
+
 }
