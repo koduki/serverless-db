@@ -1,6 +1,6 @@
 # serverless-db project
 
-This is serveless RDB on CloudRun.
+Serverless DB is Cloud Run base RDB. We don't need to prepare dedicate server for RDB!
 
 ## Running the application in dev mode
 
