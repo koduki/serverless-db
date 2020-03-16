@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package cn.orz.pascal.slessdb;
+package cn.orz.pascal.serverlessdb;
 
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Bucket;
@@ -12,13 +12,11 @@ import com.google.cloud.storage.StorageOptions;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
@@ -55,6 +53,7 @@ public class DBEngine {
         if (!Files.exists(Path.of(dbname))) {
             Files.createDirectories(Path.of("./db"));
         }
+        Files.deleteIfExists(Path.of(dbname + ".mv.db"));
 
         Bucket bucket = Logger.trace("gcs auth(ms): ", () -> {
             Storage storage = StorageOptions.getDefaultInstance().getService();
