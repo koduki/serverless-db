@@ -1,30 +1,26 @@
 # serverless-db project
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
-
-If you want to learn more about Quarkus, please visit its website: https://quarkus.io/ .
+This is serveless RDB on CloudRun.
 
 ## Running the application in dev mode
 
 You can run your application in dev mode that enables live coding using:
 ```
-./mvnw quarkus:dev
+export GOOGLE_APPLICATION_CREDENTIALS=${YOUR_CREDENTIALS_PATH}
+SERVERLESSDB_BUCKETNAME=${YOUR_BUCKET_NAME} ./mvnw quarkus:dev
 ```
 
-## Packaging and running the application
+## Packaging and running on local
 
-The application is packageable using `./mvnw package`.
-It produces the executable `serverless-db-1.0.0-SNAPSHOT-runner.jar` file in `/target` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/lib` directory.
+```bash
+./mvnw clean package
+docker build -t gcr.io/${YOUR_PROJECT_ID}/serverless-db -f src/main/docker/Dockerfile.jvm .
+docker run -it -e GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS -e SERVERLESSDB_BUCKETNAME=${YOUR_BUCKET_NAME} -p 8080:8080 gcr.io/${YOUR_PROJECT_ID}/serverless-db
+```
 
-The application is now runnable using `java -jar target/serverless-db-1.0.0-SNAPSHOT-runner.jar`.
+## Deploy to CloudRun
 
-## Creating a native executable
-
-You can create a native executable using: `./mvnw package -Pnative`.
-
-Or you can use Docker to build the native executable using: `./mvnw package -Pnative -Dquarkus.native.container-build=true`.
-
-You can then execute your binary: `./target/serverless-db-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult https://quarkus.io/guides/building-native-image-guide .
+```bash
+docker push gcr.io/${YOUR_PROJECT_ID}/serverless-db
+gcloud run deploy --image gcr.io/${YOUR_PROJECT_ID}/serverless-db --region us-west1 --platform managed --service-name serverless-db --set-env-vars=SERVERLESSDB_BUCKETNAME=${YOUR_BUCKET_NAME}
+```
