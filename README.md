@@ -2,6 +2,10 @@
 
 Serverless DB is Cloud Run base RDB. We don't need to prepare dedicate server for RDB!
 
+## JDBC
+
+https://github.com/koduki/serverlessdb-jdbc
+
 ## Running the application in dev mode
 
 You can run your application in dev mode that enables live coding using:
