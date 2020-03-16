@@ -5,35 +5,26 @@
  */
 package cn.orz.pascal.serverlessdb;
 
-import java.util.Optional;
-import java.util.function.Supplier;
+import javax.inject.Named;
+import javax.enterprise.context.Dependent;
 
 /**
  *
  * @author koduki
  */
+@Named
+@Dependent
 public class Logger {
 
-    public static <T> T trace(String message, Supplier<T> callback) {
-        long s = System.nanoTime();
-        T r = callback.get();
-        long e = System.nanoTime();
+    private static final java.util.logging.Logger APP_LOGGER = java.util.logging.Logger.getLogger("serverlessdb");
+    private static final java.util.logging.Logger PROFILE_LOGGER = java.util.logging.Logger.getLogger("serverlessdb.profile");
 
-        if (r instanceof Optional && ((Optional) r).isPresent()) {
-            throw new RuntimeException((Exception) ((Optional) r).get());
-        }
-
-        String msg = String.format("tracelog:" + message + "%.3f", ((e - s) / 1_000_000.0));
-        System.out.println(msg);
-        return r;
+    public void profile(String name, long duration) {
+        String msg = String.format("tracelog: %s(ms): %.3f", name, (duration / 1_000_000.0));
+        PROFILE_LOGGER.info(msg);
     }
 
-    public static void trace(String message, Runnable callback) {
-        long s = System.nanoTime();
-        callback.run();
-        long e = System.nanoTime();
-
-        String msg = String.format("tracelog:" + message + "%.3f", ((e - s) / 1_000_000.0));
-        System.out.println(msg);
+    public void info(String message) {
+        APP_LOGGER.info(message);
     }
 }

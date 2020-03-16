@@ -1,5 +1,6 @@
 package cn.orz.pascal.serverlessdb;
 
+import cn.orz.pascal.serverlessdb.profiles.Trace;
 import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -15,21 +16,23 @@ import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
-import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 
+@Trace
 @Path("/sql")
 public class SQLResource {
+
+    @Inject
+    Logger logger;
 
     @Inject
     DBEngine db;
 
     @GET
-    @Produces(MediaType.TEXT_PLAIN)
     @Path("test")
+    @Produces(MediaType.TEXT_PLAIN)
     public String test() throws SQLException, IOException, ClassNotFoundException {
-        long s = System.nanoTime();
-        db.connection((con) -> {
+        db.connection("testdb", (con) -> {
             try {
                 try (Statement st = con.createStatement()) {
                     st.execute("CREATE TABLE IF NOT EXISTS sample_tbl (name varchar(255))");
@@ -42,7 +45,7 @@ public class SQLResource {
                 try (Statement st = con.createStatement()) {
                     try (ResultSet rs = st.executeQuery("SELECT name FROM sample_tbl")) {
                         while (rs.next()) {
-                            System.out.println(rs.getString(1));
+//                            System.out.println(rs.getString(1));
                         }
                     }
                 }
@@ -51,27 +54,22 @@ public class SQLResource {
                 return Optional.of(ex);
             }
         });
-        long e = System.nanoTime();
-
-        String msg = String.format("tracelog:" + "web response(ms): " + "%.3f", ((e - s) / 1_000_000.0));
-        System.out.println(msg);
 
         return "success";
     }
 
-    @GET
-    @Produces(MediaType.TEXT_PLAIN)
-    @Path("execute")
-    public boolean execute(@QueryParam("sql") String sql) throws SQLException, IOException, ClassNotFoundException {
-        System.out.println("query:" + sql);
+    @POST
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("execute_update")
+    public int executeUpdate(@FormParam("dbname") String dbname, @FormParam("sql") String sql) throws SQLException, IOException, ClassNotFoundException {
+        logger.info("execute_update:" + sql);
 
-        long s = System.nanoTime();
-        List<Boolean> result = new ArrayList<>();
+        List<Integer> result = new ArrayList<>();
 
-        db.connection((con) -> {
+        db.connection(dbname, (con) -> {
             try {
                 try (Statement st = con.createStatement()) {
-                    boolean r = st.execute(sql);
+                    int r = st.executeUpdate(sql);
                     result.add(r);
                 }
                 con.commit();
@@ -81,10 +79,6 @@ public class SQLResource {
                 return Optional.of(ex);
             }
         });
-        long e = System.nanoTime();
-
-        String msg = String.format("tracelog:" + "web response(ms): " + "%.3f", ((e - s) / 1_000_000.0));
-        System.out.println(msg);
 
         return result.get(0);
     }
@@ -92,13 +86,11 @@ public class SQLResource {
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     @Path("execute_query")
-    public List<Map<String, Object>> executeQuery(@FormParam("sql") String sql) throws SQLException, IOException, ClassNotFoundException {
-        System.out.println("query:" + sql);
+    public List<Map<String, Object>> executeQuery(@FormParam("dbname") String dbname, @FormParam("sql") String sql) throws SQLException, IOException, ClassNotFoundException {
+        logger.info("execute_query:" + sql);
 
-        long s = System.nanoTime();
         List<Map<String, Object>> result = new ArrayList<>();
-
-        db.connection((con) -> {
+        db.connection(dbname, (con) -> {
             try {
                 try (Statement st = con.createStatement()) {
                     try (ResultSet rs = st.executeQuery(sql)) {
@@ -107,7 +99,7 @@ public class SQLResource {
 
                             int colmunCount = rs.getMetaData().getColumnCount();
                             for (int i = 0; i < colmunCount; i++) {
-                                String name = rs.getMetaData().getColumnName(i+1);
+                                String name = rs.getMetaData().getColumnName(i + 1);
                                 r.put(name, rs.getObject(name));
                             }
                             result.add(r);
@@ -120,10 +112,6 @@ public class SQLResource {
                 return Optional.of(ex);
             }
         });
-        long e = System.nanoTime();
-
-        String msg = String.format("tracelog:" + "web response(ms): " + "%.3f", ((e - s) / 1_000_000.0));
-        System.out.println(msg);
 
         return result;
     }

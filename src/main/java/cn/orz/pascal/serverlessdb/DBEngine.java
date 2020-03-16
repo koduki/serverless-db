@@ -5,6 +5,7 @@
  */
 package cn.orz.pascal.serverlessdb;
 
+import cn.orz.pascal.serverlessdb.profiles.Trace;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Bucket;
 import com.google.cloud.storage.Storage;
@@ -17,82 +18,87 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.function.Function;
-import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import javax.inject.Named;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  *
  * @author koduki
  */
+@Trace
+@Named
 @ApplicationScoped
 public class DBEngine {
 
-    @Inject
-    @ConfigProperty(name = "serverlessdb.url")
-    String url;
+    String jdbcPrefix = "jdbc:h2:file:";
+    String dbdir = "./db/";
 
     @Inject
-    @ConfigProperty(name = "serverlessdb.backup")
-    String backup;
+    @ConfigProperty(name = "serverlessdb.backupdir")
+    String backupdir;
 
-    String dbname;
-
-    String bcuketName = "serverlsss-db26y345872t7852";
+    @Inject
+    @ConfigProperty(name = "serverlessdb.bucketname")
+    String bcuketName;
 
     public DBEngine() {
     }
 
-    @PostConstruct
-    public void init() {
-        this.dbname = parseUrl(url);
-    }
+    synchronized public void connection(String dbname, Function<Connection, Optional<SQLException>> callback) throws SQLException, ClassNotFoundException, IOException {
+        clearLocalDir(dbname);
 
-    synchronized public void connection(Function<Connection, Optional<SQLException>> callback) throws SQLException, ClassNotFoundException, IOException {
-        if (!Files.exists(Path.of(dbname))) {
-            Files.createDirectories(Path.of("./db"));
-        }
-        Files.deleteIfExists(Path.of(dbname + ".mv.db"));
+        Bucket bucket = getBucket();
 
-        Bucket bucket = Logger.trace("gcs auth(ms): ", () -> {
-            Storage storage = StorageOptions.getDefaultInstance().getService();
-            return storage.get(bcuketName);
-        });
-
-        Logger.trace("gcs read(ms): ", () -> {
-            Blob blob = bucket.get(backup);
-            try {
-                if (blob.exists()) {
-                    blob.downloadTo(Path.of(dbname + ".mv.db"));
-                }
-            } catch (NullPointerException ex) {
-                System.err.println("WARN: no db");
-            }
-        });
+        readDbFiles(bucket, dbname);
 
         Class.forName("org.h2.Driver");
-        try (Connection con = DriverManager.getConnection(url)) {
-            Optional<SQLException> r = callback.apply(con);
+        try (Connection con = DriverManager.getConnection(jdbcPrefix + dbdir + dbname)) {
+            Optional<SQLException> r = execute(callback, con);
             if (r.isPresent()) {
                 throw r.get();
             }
         } finally {
-            Logger.trace("gcs write(ms): ", () -> {
-                try {
-                    byte[] bytes = Files.readAllBytes(Path.of(dbname + ".mv.db"));
-                    bucket.create(backup, bytes);
-                    return Optional.empty();
-                } catch (IOException ex) {
-                    return Optional.of(ex);
-                }
-            });
+            storeDbFiles(dbname, bucket);
         }
     }
 
-    private String parseUrl(String url) {
-        String[] xs = url.split(":");
-        return xs[xs.length - 1];
+    public Optional<SQLException> execute(Function<Connection, Optional<SQLException>> callback, final Connection con) {
+        Optional<SQLException> r = callback.apply(con);
+        return r;
     }
 
+    public void storeDbFiles(String dbname, Bucket bucket) throws IOException {
+        byte[] bytes = Files.readAllBytes(getDbFilePath(dbname));
+        bucket.create(backupdir + dbname, bytes);
+    }
+
+    public void readDbFiles(Bucket bucket, String dbname) {
+        Blob blob = bucket.get(backupdir + dbname);
+        try {
+            if (blob.exists()) {
+                blob.downloadTo(getDbFilePath(dbname));
+            }
+        } catch (NullPointerException ex) {
+            System.err.println("WARN: no db");
+        }
+    }
+
+    public Bucket getBucket() {
+        Storage storage = StorageOptions.getDefaultInstance().getService();
+        Bucket bucket = storage.get(bcuketName);
+        return bucket;
+    }
+
+    private void clearLocalDir(String dbname) throws IOException {
+        if (!Files.exists(Path.of(dbdir))) {
+            Files.createDirectories(Path.of(dbdir));
+        }
+        Files.deleteIfExists(getDbFilePath(dbname));
+    }
+
+    private Path getDbFilePath(String dbname) {
+        return Path.of(dbdir + dbname + ".mv.db");
+    }
 }
