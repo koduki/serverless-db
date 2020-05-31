@@ -46,7 +46,8 @@ public class DBEngine {
     public DBEngine() {
     }
 
-    synchronized public void connection(String dbname, Function<Connection, Optional<SQLException>> callback) throws SQLException, ClassNotFoundException, IOException {
+    synchronized public void connection(String dbname, Function<Connection, Optional<SQLException>> callback)
+            throws SQLException, ClassNotFoundException, IOException {
         clearLocalDir(dbname);
 
         Bucket bucket = getBucket();
@@ -64,17 +65,24 @@ public class DBEngine {
         }
     }
 
-    public Optional<SQLException> execute(Function<Connection, Optional<SQLException>> callback, final Connection con) {
+    public void reset(String dbname) {
+        Bucket bucket = getBucket();
+        Blob blob = bucket.get(backupdir + dbname);
+        blob.delete();
+    }
+
+    private Optional<SQLException> execute(Function<Connection, Optional<SQLException>> callback,
+            final Connection con) {
         Optional<SQLException> r = callback.apply(con);
         return r;
     }
 
-    public void storeDbFiles(String dbname, Bucket bucket) throws IOException {
+    private void storeDbFiles(String dbname, Bucket bucket) throws IOException {
         byte[] bytes = Files.readAllBytes(getDbFilePath(dbname));
         bucket.create(backupdir + dbname, bytes);
     }
 
-    public void readDbFiles(Bucket bucket, String dbname) {
+    private void readDbFiles(Bucket bucket, String dbname) {
         Blob blob = bucket.get(backupdir + dbname);
         try {
             if (blob.exists()) {
@@ -85,7 +93,7 @@ public class DBEngine {
         }
     }
 
-    public Bucket getBucket() {
+    private Bucket getBucket() {
         Storage storage = StorageOptions.getDefaultInstance().getService();
         Bucket bucket = storage.get(bcuketName);
         return bucket;
